@@ -1,0 +1,23 @@
+
+.leaflet-tooltip-container {
+    z-index: 4;
+}
+
+.leaflet-tooltip {
+    display: none;
+    opacity: 0;
+    box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.13);
+    -webkit-transition: opacity 150ms linear;
+    -moz-transition: opacity 150ms linear;
+    -o-transition: opacity 150ms linear;
+    transition: opacity 150ms linear;
+    border-radius: 2px;
+    background-color: #FFF;
+    padding: 0;
+    z-index: 10;
+    border: 0;
+}
+
+.leaflet-tooltip.leaflet-tooltip-show {
+    opacity: 0.95;
+}

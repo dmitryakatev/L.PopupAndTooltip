@@ -1,243 +1,173 @@
 ﻿L.MarkerTooltip = L.DelayTask.extend({
-	
+
 	options: {
-		width: 'auto',
-		minWidth: '',
-		maxWidth: '',
-		padding: '0px 0px',
-		// showDelay: 100,
-		// hideDelay: 100,
-		mouseOffset: L.point(0, 24),
-		fadeAnimation: true,
-		trackMouse: false
+		html: null,
+		update: null
 	},
-	
+
+	initialize: function (options) {
+		L.DelayTask.prototype.initialize.call(this, options);
+
+		this.clientX = 0;
+		this.clientY = 0;
+	},
+
 	isVisible: function () {
-		return this._showing;
+		return this.executed;
 	},
 
 	setHtml: function (html) {
-		if (L.MarkerTooltip.activeTip === this) {
-			this._setHtml(html);
-		} else {
+		if (!this.options.update) {
 			this.options.html = html;
 		}
+
+		this._setHtml(html);
 	},
 
-	
 	// @override
 	runTask: function(e) {
-		var point = null;
-		
-		if (e.originalEvent) {
-			point = L.point(e.containerPoint.x, e.containerPoint.y);
-		} else {
-			point = this._target._map.mouseEventToContainerPoint(e);
-		}
+		this.clientX = e.originalEvent.clientX;
+		this.clientY = e.originalEvent.clientY;
 
-		this.show(point);
-	},
-
-	// @override
-	updatePosition: function(e) {
-		this._updatePosition(e);
+		this.show();
 	},
 
 	// @override
 	cancelTask: function() {
-		this._hide();
+		this.hide();
 	},
 
-	// show / hide
-
-	show: function (point, html) {
-		if (!this.hasMap(this._target)) {
-			return;
-		}
-
-	    if (L.MarkerTooltip.activeTip && L.MarkerTooltip.activeTip != this) {
-			L.MarkerTooltip.activeTip._hide();
-		}
-
-		L.MarkerTooltip.activeTip = this;
-
-		// --------------------------------------------------------
-
-		var map = this._target._map;
-		var container = map._tooltipContainer;
-		var content = container.children[0];
-
-		content.style.width = this._isNumeric(this.options.width) ? this.options.width + 'px' : this.options.width;
-		content.style.minWidth = this._isNumeric(this.options.minWidth) ? this.options.minWidth + 'px' : this.options.minWidth;
-		content.style.maxWidth = this._isNumeric(this.options.maxWidth) ? this.options.maxWidth + 'px' : this.options.maxWidth;
-		content.style.padding = this._isNumeric(this.options.padding) ? this.options.padding + 'px' : this.options.padding;
-
-		// --------------------------------------------------------
-		
+	show: function () {
 		if (this.options.update) {
 			this.options.update(this, this._target);
 		} else {
-			if (html) {
-				this.options.html = html;
-			}
-
 			this._setHtml(this.options.html);
 		}
-		
-		this.setPosition(point);
-		
-		if (this.options.showDelay) {
-			this._delay(this._show, this, this.options.showDelay);
-		} else {
-			this._show();
-		}
+
+		var content = this.getContent();
+		content.style.display = 'inline-block';
+		L.DomUtil.addClass(content, 'leaflet-tooltip-show');
+
+		this.setPosition();
 	},
 
-	_show: function () {
-		if (!this.hasMap(this._target)) {
-			return;
-		}
-
-		var container = this._target._map._tooltipContainer;
-		var content = container.children[0];
-		
-		if (!this._showing) {
-			this._showing = true;
-
-			L.DomUtil.addClass(content, 'leaflet-tooltip-fade');
-
-			// Necessary to force re-calculation of the opacity value so transition will run correctly
-			if (window.getComputedStyle) {
-				window.getComputedStyle(content).opacity;
-			}
-		}
+	hide: function () {	
+		var content = this.getContent();
+		content.style.display = 'none';
+		L.DomUtil.removeClass(content, 'leaflet-tooltip-show');
 	},
 
-	hide: function () {
-		if (this.options.hideDelay) {
-			this._delay(this._hide, this, this.options.hideDelay);
-		} else {
-			this._hide();
-		}		
+	getContent: function() {
+		return this._target._map._tooltipContainer.children[0];
 	},
-
-	_hide: function () {	
-		if (this._timeout) {
-			clearTimeout(this._timeout);
-		}
-		
-		if (this._showing) {
-			this._showing = false;
-
-			var container = this._target._map._tooltipContainer;
-			var content = container.children[0];
-
-		    content.style.display = 'none';
-			L.DomUtil.removeClass(content, 'leaflet-tooltip-fade');
-
-			if (L.MarkerTooltip.activeTip === this) {
-				delete L.MarkerTooltip.activeTip;
-			}
-		}
-	},
-
-	// additions
 
 	_setHtml: function(html) {
-		if (this.hasMap(this._target)) {
-			var container = this._target._map._tooltipContainer;
-			var content = container.children[0];
+		if (this.isVisible() && typeof html === 'string') {
+			var content = this.getContent();
+			content.innerHTML = html;
 
-			if (typeof html === 'string') {
-				content.innerHTML = html;
-			}
-
-			this._sizeChanged = true;
-		} else {
-			this.options.html = html;
+			this.setPosition();
 		}
-	},
-
-	_delay: function (func, scope, delay) {
-		var me = this;
-
-		if (this._timeout) {
-			clearTimeout(this._timeout);
-		}
-
-		this._timeout = setTimeout(function () {
-			delete me._timeout;
-			func.call(scope);
-		}, delay);
-	},
-
-	_isNumeric: function (val) {
-		return !isNaN(parseFloat(val)) && isFinite(val);
-	},
-
-	_getElementSize: function (el) {		
-		var size = this._size;
-
-		if (!size || this._sizeChanged) {
-			size = {};
-
-			el.style.left = '-999999px';
-			el.style.right = 'auto';
-			el.style.display = 'inline-block';
-			
-			size.x = el.offsetWidth;
-			size.y = el.offsetHeight;
-			
-			el.style.left = 'auto';
-			
-			this._sizeChanged = false;
-		}
-		return size;
 	},
 	
-	setPosition: function (point) {
-		if (!this.hasMap(this._target)) {
-			return;
-		}
+	setPosition: function () {
+		var mapNode = this._target._map._container;
+		var content = this.getContent();
+		var mapRect = mapNode.getBoundingClientRect();
+		var contentRect = content.getBoundingClientRect();
 
-		var map = this._target._map;
-		var mapSize = map.getSize();
-		var container = map._tooltipContainer;
-		var content = container.children[0];
+		// ширина \ высота карты
+		var mapWidth = mapRect.width;
+		var mapHeight = mapRect.height;
 
-		var contentSize = this._getElementSize(content);
-		point = point.add(this.options.mouseOffset);
-		
-		if (point.x + contentSize.x > mapSize.x) {
-			content.style.left = 'auto';
-			content.style.right = (mapSize.x - point.x) + 'px';
+		// ширина \ высота тултипа
+		var tipWidth = contentRect.width;
+		var tipHeight = contentRect.height;
+
+		// координаты тултипа внутри карты
+		var rawX = this.clientX - mapRect.left;
+		var rawY = this.clientY - mapRect.top;
+
+		// позиция x \ y где должен располагаться тултип с учетом сдвига
+		var x = rawX + L.MarkerTooltip.SHIFT;
+		var y = rawY + L.MarkerTooltip.SHIFT;
+
+		// если тултип выходит за край карты справа \ снизу
+		var isOverRight = x + (tipWidth + L.MarkerTooltip.MARGIN) > mapWidth;
+		var isOverBottom = y + (tipHeight + L.MarkerTooltip.MARGIN) > mapHeight;
+
+		// если высота тултипа не помещается в допустимую зону по высоте
+		// (с учетом отступов), то покажем тултип по центру
+		if (tipHeight + 2 * L.MarkerTooltip.MARGIN > mapHeight) {
+			// если высота тултипа больше чем размер всей карты
+			// то покажем тултип в самом верху карты
+			if (tipHeight > mapHeight) {
+				y = 0;
+			} else {
+				y = (mapHeight - tipHeight) / 2;
+			}
+
+			// если тултип не помещается справа и помещается слева
+			// то будем показывать слева
+			if (isOverRight && x - (tipWidth + L.MarkerTooltip.MARGIN) >= 0) {
+				x = rawX - (tipWidth + L.MarkerTooltip.MARGIN);
+			}
 		} else {
-			content.style.left = point.x + 'px';
-			content.style.right = 'auto';
-		}
-		
-		if (point.y + contentSize.y > mapSize.y) {
-			content.style.top = 'auto';
-			content.style.bottom = (mapSize.y - point.y) + 'px';
-		} else {
-			content.style.top = point.y + 'px';
-			content.style.bottom = 'auto';
-		}
-	},
+			// тултип выходит за край карты снизу
+			if (isOverBottom) {
+				y = mapHeight - (tipHeight + L.MarkerTooltip.MARGIN);
+			} else {
+				// если тултип прилипает сверху, то отодвинем
+				if (y < L.MarkerTooltip.MARGIN) {
+					y = L.MarkerTooltip.MARGIN;
+				}
+			}
 
-	_updatePosition: function (e) {
-		L.DomEvent.stopPropagation(e);
+			// тултип выходит за край карты справа
+			if (isOverRight) {
+				// если тултип выходит одновременно и справа и снизу
+				// то поднимем тултип в самый вверх, чтобы не перекрывал иконку
+				if (isOverBottom) {
+					y = rawY - (L.MarkerTooltip.SHIFT + tipHeight);
+				}
+				
+				x = mapWidth - (tipWidth + L.MarkerTooltip.MARGIN);
 
-		if (this.options.trackMouse) {
-			var point = this._map.mouseEventToContainerPoint(e);		
-			this.setPosition(point);
+				// если после определения координат, где должен находиться
+				// тултип мы понимаем что он выходит за рамки карты сверху, то 
+				// поместим его вверху, а также справа или слева
+				if (y < L.MarkerTooltip.MARGIN) {
+					y = L.MarkerTooltip.MARGIN;
+					x = rawX + L.MarkerTooltip.SHIFT;
+
+					// если тултип не помещается справа и помещается слева
+					// то будем показывать слева
+					if (x - (tipWidth + L.MarkerTooltip.MARGIN) >= 0) {
+						x = rawX - (tipWidth + L.MarkerTooltip.MARGIN);
+					}
+				}
+			} else {
+				// если тултип прилипает слева, то отодвинем
+				if (x < L.MarkerTooltip.MARGIN) {
+					x = L.MarkerTooltip.MARGIN;
+				}
+			}
 		}
-	},
 
-    _onMapChange: function (e) {
-        this.hide();
-    }
+		content.style.left = x + 'px';
+		content.style.top = y + 'px';
+	}
 });
+
+// CONSTS
+
+// сдвиг по оси X и Y
+// чтобы тултип показывался не сразу под курсором, а чуть в стороне
+L.MarkerTooltip.SHIFT = 15;
+
+// константа. минимальное расстояние между тултипом и краем карты
+L.MarkerTooltip.MARGIN = 30;
+		
 
 L.Map.addInitHook(function () {
 	this._tooltipContainer = L.DomUtil.create('div', 'leaflet-tooltip-container', this._container);
@@ -248,6 +178,6 @@ L.Map.addInitHook(function () {
 	this._tooltipContainer.appendChild(div);
 });
 
-L.markerTooltip = function (options) {
+L.markertooltip = function (options) {
     return new L.MarkerTooltip(options);
 };
